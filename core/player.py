@@ -74,18 +74,19 @@ class Player:
         if not board.city_is_legal(node_id, self.id):
             return False
         return self.has_resources(CITY_COST)
-    
-    def can_build_road(self, board: Board, road_id: int) -> bool:
+
+    def can_build_road(self, board: Board, road_id: int, start_of_the_game: bool) -> bool:
         if self.built["roads"] >= MAX_ROADS:
             return False
         if not board.road_is_legal(road_id, self.id):
             return False
-        return self.has_resources(ROAD_COST)
+        return self.has_resources(ROAD_COST) if not start_of_the_game else True
     
     ## action methods
 
     def build_settlement(self, board: Board, node_id: int, start_of_the_game: bool) -> bool:
-        if not self.can_build_settlement(board, node_id, start_of_the_game):
+        # this theoretically shouldn't happen, but just in case (this method is called only for legal node_ids, if none, it won't be called)
+        if not self.can_build_settlement(board, node_id, start_of_the_game): 
             return False
         
         if not start_of_the_game:
@@ -99,6 +100,7 @@ class Player:
     
     
     def build_city(self, board: Board, node_id: int) -> bool:
+        # this theoretically shouldn't happen, but just in case (this method is called only for legal node_ids, if none, it won't be called)
         if not self.can_build_city(board, node_id):
             return False
         
@@ -112,11 +114,13 @@ class Player:
         return True
     
 
-    def build_road(self, board: Board, road_id: int) -> bool:
-        if not self.can_build_road(board, road_id):
+    def build_road(self, board: Board, road_id: int, start_of_the_game: bool) -> bool:
+        # this theoretically shouldn't happen, but just in case (this method is called only for legal node_ids, if none, it won't be called)
+        if not self.can_build_road(board, road_id, start_of_the_game):
             return False
-        
-        self.deduct_resources(ROAD_COST)
+
+        if not start_of_the_game:
+            self.deduct_resources(ROAD_COST)
 
         board.set_road(road_id, self.id)
 
