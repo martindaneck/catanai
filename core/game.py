@@ -76,7 +76,7 @@ class Game:
             self.distribute_resources(roll)
 
 
-        self.turn_number += 1
+        self.turn_number += 1     # <- this number is how manyeth turn it is this turn
 
         if self.turn_number == 5: # turns 1-4 are initial placement, so on turn 5 we end it 
             self.start_of_the_game = False
@@ -182,8 +182,9 @@ class Game:
             success = self.perform_build_action(action_type, target_id)
             if success:
                 self.check_win_condition() # also finishes the game if win condition met
-        elif action_type == "end_turn":
-            self.switch_player()
+        elif action_type == "end_turn": # do not switch when the turn number is 2. turn order is P1, P2, P2, P1 for turns 1-4 to set up initial placements
+            if self.turn_number != 2:
+                self.switch_player()
             success = True
         else:
             success = False  # unknown action
@@ -191,3 +192,5 @@ class Game:
         return success
 
       
+    ##### GAME STATE QUERY METHODS #####
+    # not yet implemented
