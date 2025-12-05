@@ -28,7 +28,7 @@ class Game:
         self.start_of_the_game = True  # special rules for initial turns
 
         # longest road tracking
-        self.longest_road_owner = None
+        self.longest_road_owner = 0 # 0 if no one, 1 if p1, 2 if p2
         self.longest_road_length = 5  # Minimum length to claim longest road
 
         # win condition
@@ -117,6 +117,21 @@ class Game:
 
         return points
     
+    def update_longest_road(self):
+        """
+        Check both players' longest roads and update the game state if needed.
+        """
+        p1_road_length = self.board.calculate_longest_road(self.p1.id)
+        p2_road_length = self.board.calculate_longest_road(self.p2.id)
+
+        if p1_road_length >= self.longest_road_length and p1_road_length > p2_road_length:
+            self.longest_road_owner = 1
+            self.longest_road_length = p1_road_length
+        elif p2_road_length >= self.longest_road_length and p2_road_length > p1_road_length:
+            self.longest_road_owner = 2
+            self.longest_road_length = p2_road_length
+        # if tie or neither exceeds current longest, no change
+    
     def check_win_condition(self):
         """
         Game ends when a player maxes all 3 structures
@@ -180,6 +195,8 @@ class Game:
             success = True
         elif action_type in {"build_settlement", "build_city", "build_road"}:
             success = self.perform_build_action(action_type, target_id)
+            if success and action_type == "build_road":
+                self.update_longest_road()
             if success:
                 self.check_win_condition() # also finishes the game if win condition met
         elif action_type == "end_turn": # do not switch when the turn number is 2. turn order is P1, P2, P2, P1 for turns 1-4 to set up initial placements
@@ -190,6 +207,116 @@ class Game:
             success = False  # unknown action
 
         return success
+
+
+    ##### Longest Road Calculation #####
+    
+    def update_longest_road(self):
+        """
+        Compute longest road for both players.
+        Apply Catan rules:
+        - Roads cannot pass THROUGH opponents' settlements.
+        - Roads still count on the open side if only one endpoint is blocked.
+        - If tie: longest_road_owner = 0.
+        """
+
+        p1_len = self._compute_longest_road_for_player(1)
+        p2_len = self._compute_longest_road_for_player(2)
+
+        # No one reaches minimum threshold
+        best = max(p1_len, p2_len)
+        if best < self.longest_road_length:
+            self.longest_road_owner = 0
+            return
+
+        # Tie
+        if p1_len == p2_len:
+            self.longest_road_owner = 0
+            return
+
+        # Unique winner
+        if p1_len > p2_len:
+            self.longest_road_owner = 1
+        else:
+            self.longest_road_owner = 2
+
+
+    def _player_road_graph(self, player_id: int):
+        """
+        Build adjacency list for player's road graph.
+        Cannot pass THROUGH an opponent settlement.
+        But roads touching a blocked node still count from the free endpoint.
+        """
+        if player_id == 1:
+            blocked = {2, 4}   # opponent has 2 (settlement) or 4 (city)
+        else:
+            blocked = {1, 3}
+
+        adj = {}
+
+        for road in self.board.roads.values():
+            if road.owner != player_id:
+                continue
+
+            a, b = road.nodes
+            a_blocked = self.board.nodes[a].occupant in blocked
+            b_blocked = self.board.nodes[b].occupant in blocked
+
+            # Both ends blocked → unusable
+            if a_blocked and b_blocked:
+                continue
+
+            # If A is not blocked, add A → B
+            if not a_blocked:
+                adj.setdefault(a, []).append(b)
+
+            # If B is not blocked, add B → A
+            if not b_blocked:
+                adj.setdefault(b, []).append(a)
+
+        return adj
+    
+
+    def _dfs_longest_path(self, graph, current, visited_edges):
+        """
+        DFS computing longest simple path through edges.
+        graph[node] = list of connected nodes.
+        visited_edges = set of (min(a,b), max(a,b)) tuples.
+        """
+        best = 0
+
+        for nxt in graph.get(current, []):
+            edge = (min(current, nxt), max(current, nxt))
+            if edge in visited_edges:
+                continue
+
+            visited_edges.add(edge)
+            length = 1 + self._dfs_longest_path(graph, nxt, visited_edges)
+            visited_edges.remove(edge)
+
+            if length > best:
+                best = length
+
+        return best
+    
+
+    def _compute_longest_road_for_player(self, player_id: int) -> int:
+        graph = self._player_road_graph(player_id)
+
+        if not graph:
+            return 0
+
+        longest = 0
+
+        # Try starting from every node in the player's graph
+        for node in graph:
+            length = self._dfs_longest_path(graph, node, set())
+            if length > longest:
+                longest = length
+
+        return longest
+
+
 
       
     ##### GAME STATE QUERY METHODS #####
