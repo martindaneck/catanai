@@ -3,8 +3,8 @@
 import random
 from typing import List, Dict
 
-from core.board import Board
-from core.player import Player, MAX_VILLAGES, MAX_CITIES, MAX_ROADS
+from .board import Board
+from .player import Player, MAX_VILLAGES, MAX_CITIES, MAX_ROADS
 
 
 
@@ -25,7 +25,13 @@ class Game:
         
         self.current_player_id = 1  # Player 1 starts
         self.turn_number = 0
-        self.start_of_the_game = True  # special rules for initial turns
+        self.last_roll: List[tuple[int, int]] = []  # stores last dice roll(s), including re-rolls when 7s
+
+        self.initial_buildings_placed = { # track initial placements - turn_number: [village_placed, road_placed]
+            0: [False, False], 
+            1: [False, False], 
+            2: [False, False], 
+            3: [False, False]}
 
         # longest road tracking
         self.longest_road_owner = 0 # 0 if no one, 1 if p1, 2 if p2
@@ -68,18 +74,15 @@ class Game:
     #############################
     def turn_start(self):
         """runs at the start of each turn"""
-        
+        self.turn_number += 1     # <- this number is how manyeth turn it is this turn
 
-        if not self.start_of_the_game:
+        if self.turn_number >= 4:
             # roll dice and distribute resources
             roll = self.roll_dice()
             self.distribute_resources(roll)
+            self.last_roll = roll # store for UI display
 
-
-        self.turn_number += 1     # <- this number is how manyeth turn it is this turn
-
-        if self.turn_number == 5: # turns 1-4 are initial placement, so on turn 5 we end it 
-            self.start_of_the_game = False
+        
 
         current_player = self.get_player(self.current_player_id)
 
@@ -94,11 +97,23 @@ class Game:
         current_player = self.get_player(self.current_player_id)
 
         if action_type == "build_settlement":
-            success = current_player.build_settlement(self.board, target_id, self.start_of_the_game)
+            if self.turn_number < 4:
+                free_village = self.initial_buildings_placed[self.turn_number][0] == False
+            else:
+                free_village = False
+            success = current_player.build_settlement(self.board, target_id, free_village)
+            if self.turn_number < 4:
+                self.initial_buildings_placed[self.turn_number][0] = success 
         elif action_type == "build_city":
             success = current_player.build_city(self.board, target_id)
         elif action_type == "build_road":
-            success = current_player.build_road(self.board, target_id, self.start_of_the_game)
+            if self.turn_number < 4:
+                free_road = self.initial_buildings_placed[self.turn_number][1] == False
+            else:
+                free_road = False
+            success = current_player.build_road(self.board, target_id, free_road)
+            if self.turn_number < 4:
+                self.initial_buildings_placed[self.turn_number][1] = success
         else:
             success = False  # unknown action
 
@@ -199,8 +214,8 @@ class Game:
                 self.update_longest_road()
             if success:
                 self.check_win_condition() # also finishes the game if win condition met
-        elif action_type == "end_turn": # do not switch when the turn number is 2. turn order is P1, P2, P2, P1 for turns 1-4 to set up initial placements
-            if self.turn_number != 2:
+        elif action_type == "end_turn": # do not switch when the turn number is 1. turn order is P1, P2, P2, P1 for turns 0-3 to set up initial placements
+            if self.turn_number != 1:
                 self.switch_player()
             success = True
         else:
@@ -320,4 +335,62 @@ class Game:
 
       
     ##### GAME STATE QUERY METHODS #####
-    # not yet implemented
+    
+    def get_ui_state(self) -> Dict:
+        """
+        Return a JSON-serializable snapshot intended for the TUI.
+        {
+            "current_player_id": int,
+            "last_rolls": [(d1,d2), ...],             # list of tuples for current turn (may be empty)
+            "resources_p1": {res: count, ...},
+            "resources_p2": {res: count, ...},
+            "available_villages_p1": [node_ids...],
+            "available_villages_p2": [node_ids...],
+            "available_roads_p1": [road_ids...],
+            "available_roads_p2": [road_ids...],
+            "available_cities_p1": [node_ids...],
+            "available_cities_p2": [node_ids...],
+        }
+        """
+        p1 = self.p1
+        p2 = self.p2
+
+        # fetch lists from players (pass board where needed)
+        if self.turn_number < 4:
+            free_village = self.initial_buildings_placed[self.turn_number][0] == False
+        else:
+            free_village = False
+
+        if self.turn_number < 4:
+            free_road = self.initial_buildings_placed[self.turn_number][1] == False
+        else:
+            free_road = False
+
+        av_v_p1 = sorted(p1.get_available_settlement_spots(
+            self.board, free_village)) if self.current_player_id == 1 else []
+        av_v_p2 = sorted(p2.get_available_settlement_spots(
+            self.board, free_village)) if self.current_player_id == 2 else []
+
+        av_r_p1 = sorted(p1.get_available_road_spots(
+            self.board, free_road)) if self.current_player_id == 1 else []
+        av_r_p2 = sorted(p2.get_available_road_spots(
+            self.board, free_road)) if self.current_player_id == 2 else []
+
+        av_c_p1 = sorted(p1.get_available_city_spots(self.board)) if self.current_player_id == 1 else []
+        av_c_p2 = sorted(p2.get_available_city_spots(self.board)) if self.current_player_id == 2 else []
+
+        state = {
+            "current_player_id": self.current_player_id,
+            "turn_number": self.turn_number,
+            "last_rolls": list(self.last_roll),  # copy safe
+            "resources_p1": dict(p1.resources),
+            "resources_p2": dict(p2.resources),
+            "available_villages_p1": av_v_p1,
+            "available_villages_p2": av_v_p2,
+            "available_roads_p1": av_r_p1,
+            "available_roads_p2": av_r_p2,
+            "available_cities_p1": av_c_p1,
+            "available_cities_p2": av_c_p2,
+        }
+        return state
+

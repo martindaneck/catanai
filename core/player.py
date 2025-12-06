@@ -1,6 +1,6 @@
 from typing import List, Dict, Set, TYPE_CHECKING
 
-from core.board import Board
+from .board import Board
 
 # Resource costs for convenience
 SETTLEMENT_COST = {
@@ -61,12 +61,12 @@ class Player:
 
     ## legality checkings
 
-    def can_build_settlement(self, board: Board, node_id: int, start_of_the_game: bool) -> bool:  
+    def can_build_settlement(self, board: Board, node_id: int, free_settlement: bool) -> bool:  
         if self.built["settlements"] >= MAX_VILLAGES:
             return False
-        if not board.settlement_is_legal(node_id, self.id, start_of_the_game):
+        if not board.settlement_is_legal(node_id, self.id, free_settlement):
             return False
-        return self.has_resources(SETTLEMENT_COST) if not start_of_the_game else True
+        return self.has_resources(SETTLEMENT_COST) if not free_settlement else True
     
     def can_build_city(self, board: Board, node_id: int) -> bool:
         if self.built["cities"] >= MAX_CITIES:
@@ -75,21 +75,21 @@ class Player:
             return False
         return self.has_resources(CITY_COST)
 
-    def can_build_road(self, board: Board, road_id: int, start_of_the_game: bool) -> bool:
+    def can_build_road(self, board: Board, road_id: int, free_road: bool) -> bool:
         if self.built["roads"] >= MAX_ROADS:
             return False
         if not board.road_is_legal(road_id, self.id):
             return False
-        return self.has_resources(ROAD_COST) if not start_of_the_game else True
+        return self.has_resources(ROAD_COST) if not free_road else True
     
     ## action methods
 
-    def build_settlement(self, board: Board, node_id: int, start_of_the_game: bool) -> bool:
+    def build_settlement(self, board: Board, node_id: int, free_settlement: bool) -> bool:
         # this theoretically shouldn't happen, but just in case (this method is called only for legal node_ids, if none, it won't be called)
-        if not self.can_build_settlement(board, node_id, start_of_the_game): 
+        if not self.can_build_settlement(board, node_id, free_settlement): 
             return False
-        
-        if not start_of_the_game:
+
+        if not free_settlement:
             self.deduct_resources(SETTLEMENT_COST)
 
         board.set_settlement(node_id, self.id)
@@ -114,12 +114,12 @@ class Player:
         return True
     
 
-    def build_road(self, board: Board, road_id: int, start_of_the_game: bool) -> bool:
+    def build_road(self, board: Board, road_id: int, free_road: bool) -> bool:
         # this theoretically shouldn't happen, but just in case (this method is called only for legal node_ids, if none, it won't be called)
-        if not self.can_build_road(board, road_id, start_of_the_game):
+        if not self.can_build_road(board, road_id, free_road):
             return False
 
-        if not start_of_the_game:
+        if not free_road:
             self.deduct_resources(ROAD_COST)
 
         board.set_road(road_id, self.id)
@@ -132,20 +132,22 @@ class Player:
     ## query methods
 
 
-    def get_possible_settlement_spots(self, board: Board, start_of_the_game: bool) -> List[int]:
+    def get_available_settlement_spots(self, board: Board, free_settlement: bool) -> List[int]:
         if self.built["settlements"] >= MAX_VILLAGES:
             return []
-        return board.list_legal_settlement_spots(self.id, start_of_the_game)
+        return board.list_legal_settlement_spots(self.id, free_settlement) if self.has_resources(SETTLEMENT_COST) or free_settlement else []
 
-    def get_possible_city_spots(self, board: Board) -> List[int]:
+
+    def get_available_city_spots(self, board: Board) -> List[int]:
         if self.built["cities"] >= MAX_CITIES:
             return []
-        return board.list_legal_city_spots(self.id)
+        return board.list_legal_city_spots(self.id) if self.has_resources(CITY_COST) else []
 
-    def get_possible_road_spots(self, board: Board) -> List[int]:
+    def get_available_road_spots(self, board: Board, free_road: bool) -> List[int]:
         if self.built["roads"] >= MAX_ROADS:
             return []
-        return board.list_legal_road_spots(self.id)
+        return board.list_legal_road_spots(self.id) if self.has_resources(ROAD_COST) or free_road else []
+    
 
 
     def get_owned_settlements(self, board: Board):
