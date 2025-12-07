@@ -215,8 +215,26 @@ class TuiOverseer:
 
         state = self.game.get_ui_state()
 
+        # determine highlighted map item
+        highlight_id = None
+        cp = state["current_player_id"]
+        row = self.ACTION_ROWS[self.selected_row]
+
+        if row == "village":
+            lst = state[f"available_villages_p{cp}"]
+            if lst:
+                highlight_id = (1,lst[self.selection[cp]["village"]])
+        elif row == "road":
+            lst = state[f"available_roads_p{cp}"]
+            if lst:
+                highlight_id = (2,lst[self.selection[cp]["road"]])
+        elif row == "city":
+            lst = state[f"available_cities_p{cp}"]
+            if lst:
+                highlight_id = (1,lst[self.selection[cp]["city"]])
+
         # top half = inline node map
-        self.draw_map(0, 0, half_y, max_x)
+        self.draw_map(0, 0, half_y, max_x, highlight_id)
 
         # bottom half split: dice panel (left quarter), player panel (right 3/4)
         dice_w = max_x // 4
@@ -230,9 +248,12 @@ class TuiOverseer:
         except curses.error:
             pass
 
+        
+
+
         self.stdscr.refresh()
 
-    def draw_map(self, y, x, h, w):
+    def draw_map(self, y, x, h, w, highlight_id=None):
         # prototype: inline nodes like `n0. n1v n2c n3. ...` wrapped into lines to fit width
         board = self.game.board
         items = []
@@ -256,6 +277,11 @@ class TuiOverseer:
             else:
                 mark = "."
                 color = self.C_DEFAULT
+
+            # 🔥 highlight selected node
+            if highlight_id == (1, nid):
+                color = self.C_HL
+
             items.append((f"n{nid}{mark}", color))
 
         # Add roads inline the same way
@@ -273,6 +299,10 @@ class TuiOverseer:
             else:
                 mark = "."
                 color = self.C_DEFAULT
+
+            # 🔥 highlight selected road
+            if highlight_id == (2, rid):
+                color = self.C_HL
 
             items.append((f"r{rid}{mark}", color))
 
@@ -294,22 +324,74 @@ class TuiOverseer:
             col += len(txt2)
 
     def draw_dice(self, y, x, h, w, state):
-        # draws last_rolls list vertically
-        rolls = state.get("last_rolls", [])
+        """
+        Draws the recent dice as compact ASCII dice.
+        Each roll is two dice side-by-side.
+        """
+
+        # Unicode pip
+        pip = "●"
+
+        # Predefined pip patterns for a 3x3 grid
+        # (row, col) => pip position inside the 3×3 inner area
+        dice_patterns = {
+            1: {(1, 1)},
+            2: {(0, 0), (2, 2)},
+            3: {(0, 0), (1, 1), (2, 2)},
+            4: {(0, 0), (0, 2), (2, 0), (2, 2)},
+            5: {(0, 0), (0, 2), (1, 1), (2, 0), (2, 2)},
+            6: {(0, 0), (0, 2), (1, 0), (1, 2), (2, 0), (2, 2)},
+        }
+
+        def draw_single_die(top_y, left_x, value):
+            # top border
+            try:
+                self.stdscr.addstr(top_y, left_x,  "┌───────┐", self.C_DICE)
+            except curses.error:
+                pass
+
+            # inside pip rows
+            for r in range(3):
+                line = "│"
+                for c in range(3):
+                    if (r, c) in dice_patterns[value]:
+                        line += f" {pip}"
+                    else:
+                        line += "  "
+                line += " │"
+                try:
+                    self.stdscr.addstr(top_y + 1 + r, left_x, line, self.C_DICE)
+                except curses.error:
+                    pass
+
+            # bottom border
+            try:
+                self.stdscr.addstr(top_y + 4, left_x, "└───────┘", self.C_DICE)
+            except curses.error:
+                pass
+
+        # Draw header
         try:
             self.stdscr.addstr(y, x + 1, "Dice:", self.C_DICE | curses.A_BOLD)
         except curses.error:
             pass
-        r = y + 2
-        for d in rolls:
-            if r >= y + h:
+
+        rolls = state.get("last_rolls", [])
+
+        # reverse order: most recent on top
+        rolls = list(reversed(rolls))
+
+        draw_y = y + 2
+
+        for (d1, d2) in rolls:
+            if draw_y + 5 > y + h:
                 break
-            text = f"{d[0]} + {d[1]}"
-            try:
-                self.stdscr.addstr(r, x + 1, text, self.C_DICE)
-            except curses.error:
-                pass
-            r += 1
+
+            draw_single_die(draw_y, x + 1, d1)
+            draw_single_die(draw_y, x + 10, d2)
+
+            draw_y += 6  # space below dice
+
         if not rolls:
             try:
                 self.stdscr.addstr(y + 2, x + 1, "(no rolls yet)", self.C_DEFAULT)
@@ -324,7 +406,7 @@ class TuiOverseer:
         cp = state["current_player_id"]
         turn_str = f"Turn {state['turn_number']}"
 
-        # Header names
+        # Header
         try:
             self.stdscr.addstr(y, left_x + 2, "P1", self.C_P1 | (curses.A_BOLD if cp == 1 else curses.A_DIM))
             self.stdscr.addstr(y, right_x + 2, "P2", self.C_P2 | (curses.A_BOLD if cp == 2 else curses.A_DIM))
@@ -332,139 +414,84 @@ class TuiOverseer:
         except curses.error:
             pass
 
-        # Rows: Finish | Build Village | Build Road | Build City | Resources
+        # Rows list
         rows_y = y + 2
-        labels = [("Finish turn", "finish"), ("Build Village", "village"), ("Build Road", "road"), ("Build City", "city")]
+        labels = [
+            ("Finish turn", "finish"),
+            ("Build Village", "village"),
+            ("Build Road", "road"),
+            ("Build City", "city")
+        ]
+
+        # Explicit mapping so city → cities (not "citys")
+        KEYMAP_P1 = {
+            "village": "available_villages_p1",
+            "road": "available_roads_p1",
+            "city": "available_cities_p1"
+        }
+        KEYMAP_P2 = {
+            "village": "available_villages_p2",
+            "road": "available_roads_p2",
+            "city": "available_cities_p2"
+        }
 
         for i, (label, key) in enumerate(labels):
             row_y = rows_y + i*2
-            # left column (P1)
-            is_selected = (self.selected_row == i)
-            attr = self.C_HL if (is_selected and cp == 1) else self.C_DEFAULT
+
+            # label left
+            attr_left = self.C_HL if (self.selected_row == i and cp == 1) else self.C_DEFAULT
             try:
-                self.stdscr.addstr(row_y, left_x + 1, f"{label}:", attr)
+                self.stdscr.addstr(row_y, left_x + 1, f"{label}:", attr_left)
             except curses.error:
                 pass
 
-            # right column (P2)
-            is_selected_p2 = (self.selected_row == i)
-            attr2 = self.C_HL if (is_selected_p2 and cp == 2) else self.C_DEFAULT
+            # label right
+            attr_right = self.C_HL if (self.selected_row == i and cp == 2) else self.C_DEFAULT
             try:
-                self.stdscr.addstr(row_y, right_x + 1, f"{label}:", attr2)
+                self.stdscr.addstr(row_y, right_x + 1, f"{label}:", attr_right)
             except curses.error:
                 pass
 
-            # draw options lists if active player matches column
-            # P1 options (keep explicit keys, cities is plural)
-            lst_key_p1 = {
-                "village": "available_villages_p1",
-                "road": "available_roads_p1",
-                "city": "available_cities_p1"
-            }.get(key, None)
-
+            # finish-turn rows get simple []
             if key == "finish":
-                # show [] box
                 try:
-                    self.stdscr.addstr(row_y, left_x + 20, "[]", attr)
-                    self.stdscr.addstr(row_y, right_x + 20, "[]", attr2)
+                    self.stdscr.addstr(row_y, left_x + 20, "[]", attr_left)
+                    self.stdscr.addstr(row_y, right_x + 20, "[]", attr_right)
                 except curses.error:
                     pass
-            else:
-                # P1 list rendering with brackets and safe indexing
-                if lst_key_p1:
-                    lst1 = state.get(lst_key_p1, [])
-                    sel1 = self._safe_index(lst1, self.selection[1][key])
-                    self.selection[1][key] = sel1  # clamp & store
-                    sx = left_x + 20
+                continue
 
-                    # opening bracket
-                    try:
-                        self.stdscr.addstr(row_y, sx, "[", self.C_DEFAULT)
-                    except curses.error:
-                        pass
-                    sx += 1  # small padding after '['
+            # --- P1 LIST ---
+            lst_key = KEYMAP_P1.get(key)
+            lst = state.get(lst_key, [])
+            sel = self._safe_index(lst, self.selection[1][key])
+            self.selection[1][key] = sel
 
-                    if not lst1:
-                        # empty list -> show closing bracket immediately
-                        try:
-                            self.stdscr.addstr(row_y, sx - 1, "]", self.C_DEFAULT)
-                        except curses.error:
-                            pass
-                    else:
-                        window1, start1 = centered_window(lst1, sel1, width=5)
-                        for iwin, val in enumerate(window1):
-                            global_idx = start1 + iwin
-                            # highlight only when this player is active and this row is selected
-                            highlight = (global_idx == sel1 and cp == 1 and self.selected_row == i)
-                            col = self.C_HL if highlight else self.C_DEFAULT
-                            try:
-                                # pad each entry consistently
-                                self.stdscr.addstr(row_y, sx, f" {val} ", col)
-                            except curses.error:
-                                pass
-                            sx += len(f" {val} ")
-                        # closing bracket
-                        try:
-                            self.stdscr.addstr(row_y, sx, "]", self.C_DEFAULT)
-                        except curses.error:
-                            pass
+            sx = left_x + 20
+            self._draw_list(row_y, sx, lst, sel, active=(cp == 1 and self.selected_row == i))
 
-                # P2 options (explicit keys)
-                lst_key_p2 = {
-                    "village": "available_villages_p2",
-                    "road": "available_roads_p2",
-                    "city": "available_cities_p2"
-                }.get(key, None)
-                if lst_key_p2:
-                    lst2 = state.get(lst_key_p2, [])
-                    sel2 = self._safe_index(lst2, self.selection[2][key])
-                    self.selection[2][key] = sel2
-                    sx2 = right_x + 20
+            # --- P2 LIST ---
+            lst_key2 = KEYMAP_P2.get(key)
+            lst2 = state.get(lst_key2, [])
+            sel2 = self._safe_index(lst2, self.selection[2][key])
+            self.selection[2][key] = sel2
 
-                    # opening bracket
-                    try:
-                        self.stdscr.addstr(row_y, sx2, "[", self.C_DEFAULT)
-                    except curses.error:
-                        pass
-                    sx2 += 2
+            sx2 = right_x + 20
+            self._draw_list(row_y, sx2, lst2, sel2, active=(cp == 2 and self.selected_row == i))
 
-                    if not lst2:
-                        try:
-                            self.stdscr.addstr(row_y, sx2 - 1, "]", self.C_DEFAULT)
-                        except curses.error:
-                            pass
-                    else:
-                        window2, start2 = centered_window(lst2, sel2, width=5)
-                        for iwin, val in enumerate(window2):
-                            global_idx = start2 + iwin
-                            highlight = (global_idx == sel2 and cp == 2 and self.selected_row == i)
-                            col = self.C_HL if highlight else self.C_DEFAULT
-                            try:
-                                self.stdscr.addstr(row_y, sx2, f" {val} ", col)
-                            except curses.error:
-                                pass
-                            sx2 += len(f" {val} ")
-                        try:
-                            self.stdscr.addstr(row_y, sx2, "]", self.C_DEFAULT)
-                        except curses.error:
-                            pass
-
-        # Resources area below
+        # Resources section
         res_y = rows_y + len(labels)*2 + 1
         try:
             self.stdscr.addstr(res_y, left_x + 1, "Resources:", curses.A_BOLD)
         except curses.error:
             pass
-        # P1 resources
-        r1 = state["resources_p1"]
-        self.draw_resources(res_y + 1, left_x + 1, r1)
-        # P2 resources
+        self.draw_resources(res_y + 1, left_x + 1, state["resources_p1"])
+
         try:
             self.stdscr.addstr(res_y, right_x + 1, "Resources:", curses.A_BOLD)
         except curses.error:
             pass
-        r2 = state["resources_p2"]
-        self.draw_resources(res_y + 1, right_x + 1, r2)
+        self.draw_resources(res_y + 1, right_x + 1, state["resources_p2"])
 
     def draw_resources(self, y, x, resources):
         # layout:
@@ -487,6 +514,42 @@ class TuiOverseer:
             self.stdscr.addstr(y+4, x, f"Ore: {ore}", self.C_DEFAULT)
         except curses.error:
             pass
+
+    def _draw_list(self, row_y, sx, lst, sel, active):
+        """Draws a list inside [ ... ] always correctly."""
+        # Opening bracket
+        try:
+            self.stdscr.addstr(row_y, sx, "[", self.C_DEFAULT)
+        except curses.error:
+            pass
+        sx += 1
+
+        # Empty → just closing bracket
+        if not lst:
+            try:
+                self.stdscr.addstr(row_y, sx, "]", self.C_DEFAULT)
+            except curses.error:
+                pass
+            return
+
+        # Non-empty: windowed
+        window, start = centered_window(lst, sel, width=5)
+        for iwin, val in enumerate(window):
+            idx = start + iwin
+            col = self.C_HL if (idx == sel and active) else self.C_DEFAULT
+            text = f" {val} "
+            try:
+                self.stdscr.addstr(row_y, sx, text, col)
+            except curses.error:
+                pass
+            sx += len(text)
+
+        # Closing bracket
+        try:
+            self.stdscr.addstr(row_y, sx, "]", self.C_DEFAULT)
+        except curses.error:
+            pass
+
 
 
 # --- entry point ---
