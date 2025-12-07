@@ -360,8 +360,6 @@ class Game:
         }
         """
         cp = self.p1 if self.current_player_id == 1 else self.p2
-        p1 = self.p1
-        p2 = self.p2
         op = self.p2 if self.current_player_id == 1 else self.p1
 
         # fetch lists from players (pass board where needed)
@@ -375,17 +373,10 @@ class Game:
         else:
             free_road = False
 
-        av_v_cp = sorted(cp.get_available_settlement_spots(
-            self.board, free_village)) if self.current_player_id == 1 else []
-
-        av_r_cp = sorted(cp.get_available_road_spots(
-            self.board, free_road)) if self.current_player_id == 1 else []
-        av_r_op = sorted(op.get_available_road_spots(
-            self.board, free_road)) if self.current_player_id == 2 else []
-
-        av_c_cp = sorted(cp.get_available_city_spots(self.board)) if self.current_player_id == 1 else []
-
-        av_to_cp = cp.get_available_trade_offers(self.board) if self.current_player_id == 1 else {}
+        av_v_cp = cp.get_available_settlement_spots(self.board, free_village)
+        av_r_cp = cp.get_available_road_spots(self.board, free_road)
+        av_c_cp = cp.get_available_city_spots(self.board)
+        av_to_cp = cp.get_available_trade_offers(self.board)
 
 
         state = {
