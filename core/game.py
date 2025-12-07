@@ -351,20 +351,18 @@ class Game:
             "current_player_id": int,
             "turn_number": int,
             "last_rolls": [(d1,d2), ...],             # list of tuples for current turn (may be empty)
-            "resources_p1": {res: count, ...},
-            "resources_p2": {res: count, ...},
-            "available_villages_p1": [node_ids...],
-            "available_villages_p2": [node_ids...],
-            "available_roads_p1": [road_ids...],
-            "available_roads_p2": [road_ids...],
-            "available_cities_p1": [node_ids...],
-            "available_cities_p2": [node_ids...],
-            "available_trade_offers_p1": {offered_resource: [(wanted_resource, cost), ...], ...},
-            "available_trade_offers_p2": {offered_resource: [(wanted_resource, cost), ...], ...},
+            "resources_cp": {res: count, ...},
+            "resources_op": {res: count, ...},
+            "available_villages_cp": [node_ids...],
+            "available_roads_cp": [road_ids...],
+            "available_cities_cp": [node_ids...],
+            "available_trade_offers_cp": {offered_resource: [(wanted_resource, cost), ...], ...},
         }
         """
+        cp = self.p1 if self.current_player_id == 1 else self.p2
         p1 = self.p1
         p2 = self.p2
+        op = self.p2 if self.current_player_id == 1 else self.p1
 
         # fetch lists from players (pass board where needed)
         if self.turn_number < 4:
@@ -377,36 +375,29 @@ class Game:
         else:
             free_road = False
 
-        av_v_p1 = sorted(p1.get_available_settlement_spots(
+        av_v_cp = sorted(cp.get_available_settlement_spots(
             self.board, free_village)) if self.current_player_id == 1 else []
-        av_v_p2 = sorted(p2.get_available_settlement_spots(
-            self.board, free_village)) if self.current_player_id == 2 else []
 
-        av_r_p1 = sorted(p1.get_available_road_spots(
+        av_r_cp = sorted(cp.get_available_road_spots(
             self.board, free_road)) if self.current_player_id == 1 else []
-        av_r_p2 = sorted(p2.get_available_road_spots(
+        av_r_op = sorted(op.get_available_road_spots(
             self.board, free_road)) if self.current_player_id == 2 else []
 
-        av_c_p1 = sorted(p1.get_available_city_spots(self.board)) if self.current_player_id == 1 else []
-        av_c_p2 = sorted(p2.get_available_city_spots(self.board)) if self.current_player_id == 2 else []
+        av_c_cp = sorted(cp.get_available_city_spots(self.board)) if self.current_player_id == 1 else []
 
-        av_to_p1 = p1.get_available_trade_offers(self.board) if self.current_player_id == 1 else {}
-        av_to_p2 = p2.get_available_trade_offers(self.board) if self.current_player_id == 2 else {}
+        av_to_cp = cp.get_available_trade_offers(self.board) if self.current_player_id == 1 else {}
+
 
         state = {
             "current_player_id": self.current_player_id,
             "turn_number": self.turn_number,
             "last_rolls": list(self.last_roll),  # copy safe
-            "resources_p1": dict(p1.resources),
-            "resources_p2": dict(p2.resources),
-            "available_villages_p1": av_v_p1,
-            "available_villages_p2": av_v_p2,
-            "available_roads_p1": av_r_p1,
-            "available_roads_p2": av_r_p2,
-            "available_cities_p1": av_c_p1,
-            "available_cities_p2": av_c_p2,
-            "available_trade_offers_p1": av_to_p1,
-            "available_trade_offers_p2": av_to_p2
+            "resources_cp": dict(cp.resources),
+            "resources_op": dict(op.resources),
+            "available_villages_cp": av_v_cp,
+            "available_roads_cp": av_r_cp,
+            "available_cities_cp": av_c_cp,
+            "available_trade_offers_cp": av_to_cp,
         }
         return state
 
