@@ -68,9 +68,9 @@ class Game:
         for player_id, resource in production_events:
             self.get_player(player_id).add_resource(resource)
 
-    def handle_bank_trade(self, player: Player, offered: str, wanted: str, cost: int) -> bool:
-        player.resources[offered] -= cost
-        player.resources[wanted] += 1
+    def handle_bank_trade(self, player: Player, to_receive: str, to_give: str, cost: int) -> bool:
+        player.resources[to_give] -= cost
+        player.resources[to_receive] += 1
         return True
 
     #############################    
@@ -224,8 +224,8 @@ class Game:
                 self.switch_player()
             success = True
         elif action_type == "trade_bank":
-            offered, wanted, cost = target_id  # unpack tuple
-            success = self.handle_bank_trade(current_player, offered, wanted, cost)
+            to_receive, to_give, cost = target_id  # unpack tuple
+            success = self.handle_bank_trade(current_player, to_receive, to_give, cost)
         else:
             success = False  # unknown action
 

@@ -169,13 +169,15 @@ class Player:
             else:
                 rates[res] = 4
         # build offers
-        for res in resources:
-            cost = rates[res]
-            if self.resources[res] >= cost:
-                offers[res] = []
-                for target_res in resources:
-                    if target_res != res:
-                        offers[res].append((target_res, cost))
+        for resource_to_get in resources:
+            for resource_to_give in resources:
+                if resource_to_get == resource_to_give:
+                    continue
+                rate = rates[resource_to_give]
+                if self.resources[resource_to_give] >= rate:
+                    if resource_to_get not in offers:
+                        offers[resource_to_get] = []
+                    offers[resource_to_get].append((resource_to_give, rate))
 
         return offers
 
