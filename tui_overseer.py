@@ -73,6 +73,17 @@ class TuiOverseer:
         # small delay for getch blocking behavior
         self.stdscr.timeout(100)  # ms
 
+    # safe index utility
+    def _safe_index(self, lst, idx):
+        """Clamp index safely to valid range."""
+        if not lst:
+            return 0
+        if idx < 0:
+            return 0
+        if idx >= len(lst):
+            return len(lst) - 1
+        return idx  
+
     # --- main loop ---
     def run(self):
         while True:
@@ -123,16 +134,16 @@ class TuiOverseer:
         row = self.ACTION_ROWS[self.selected_row]
         if row == "village":
             lst = state[f"available_villages_p{active}"]
-            if lst:
-                self.selection[active]["village"] = max(0, self.selection[active]["village"] - 1)
+            idx = self._safe_index(lst, self.selection[active]["village"])
+            self.selection[active]["village"] = self._safe_index(lst, idx - 1)
         elif row == "road":
             lst = state[f"available_roads_p{active}"]
-            if lst:
-                self.selection[active]["road"] = max(0, self.selection[active]["road"] - 1)
+            idx = self._safe_index(lst, self.selection[active]["road"])
+            self.selection[active]["road"] = self._safe_index(lst, idx - 1)
         elif row == "city":
             lst = state[f"available_cities_p{active}"]
-            if lst:
-                self.selection[active]["city"] = max(0, self.selection[active]["city"] - 1)
+            idx = self._safe_index(lst, self.selection[active]["city"])
+            self.selection[active]["city"] = self._safe_index(lst, idx - 1)
 
     def on_right(self):
         """Scroll right for active player's current row's selection"""
@@ -141,19 +152,18 @@ class TuiOverseer:
         row = self.ACTION_ROWS[self.selected_row]
         if row == "village":
             lst = state[f"available_villages_p{active}"]
-            if lst:
-                self.selection[active]["village"] = min(len(lst)-1, self.selection[active]["village"] + 1)
-        elif row == "road":
+            idx = self._safe_index(lst, self.selection[active]["village"])
+            self.selection[active]["village"] = self._safe_index(lst, idx + 1)
+        elif row == "road": 
             lst = state[f"available_roads_p{active}"]
-            if lst:
-                self.selection[active]["road"] = min(len(lst)-1, self.selection[active]["road"] + 1)
+            idx = self._safe_index(lst, self.selection[active]["road"])
+            self.selection[active]["road"] = self._safe_index(lst, idx + 1)
         elif row == "city":
             lst = state[f"available_cities_p{active}"]
-            if lst:
-                self.selection[active]["city"] = min(len(lst)-1, self.selection[active]["city"] + 1)
+            idx = self._safe_index(lst, self.selection[active]["city"])
+            self.selection[active]["city"] = self._safe_index(lst, idx + 1)
 
     def on_enter(self):
-        """Execute action for active player"""
         state = self.game.get_ui_state()
         active = state["current_player_id"]
         row = self.ACTION_ROWS[self.selected_row]
@@ -167,26 +177,35 @@ class TuiOverseer:
             lst = state[f"available_villages_p{active}"]
             if not lst:
                 return
-            idx = self.selection[active]["village"]
+            
+            idx = self._safe_index(lst, self.selection[active][row])
+            self.selection[active][row] = idx
             target = lst[idx]
-            self.game.advance_one_action("build_settlement", target)
-            # update longest road can be triggered by game logic already if you call update there
 
-        if row == "road":
+            self.game.advance_one_action("build_settlement", target)
+
+        elif row == "road":
             lst = state[f"available_roads_p{active}"]
             if not lst:
                 return
-            idx = self.selection[active]["road"]
+            
+            idx = self._safe_index(lst, self.selection[active][row])
+            self.selection[active][row] = idx
             target = lst[idx]
+
             self.game.advance_one_action("build_road", target)
 
-        if row == "city":
+        elif row == "city":
             lst = state[f"available_cities_p{active}"]
             if not lst:
                 return
-            idx = self.selection[active]["city"]
+
+            idx = self._safe_index(lst, self.selection[active][row])
+            self.selection[active][row] = idx
             target = lst[idx]
+            
             self.game.advance_one_action("build_city", target)
+
 
     # --- drawing ---
     def draw(self):
@@ -310,7 +329,6 @@ class TuiOverseer:
             self.stdscr.addstr(y, left_x + 2, "P1", self.C_P1 | (curses.A_BOLD if cp == 1 else curses.A_DIM))
             self.stdscr.addstr(y, right_x + 2, "P2", self.C_P2 | (curses.A_BOLD if cp == 2 else curses.A_DIM))
             self.stdscr.addstr(y, x + w - len(turn_str) - 2, turn_str, self.C_DEFAULT | curses.A_BOLD)
-
         except curses.error:
             pass
 
@@ -337,7 +355,7 @@ class TuiOverseer:
                 pass
 
             # draw options lists if active player matches column
-            # P1 options
+            # P1 options (keep explicit keys, cities is plural)
             lst_key_p1 = {
                 "village": "available_villages_p1",
                 "road": "available_roads_p1",
@@ -352,26 +370,46 @@ class TuiOverseer:
                 except curses.error:
                     pass
             else:
+                # P1 list rendering with brackets and safe indexing
                 if lst_key_p1:
                     lst1 = state.get(lst_key_p1, [])
-                    sel1 = self.selection[1][key]
-                    window1, start1 = centered_window(lst1, sel1, width=5)
+                    sel1 = self._safe_index(lst1, self.selection[1][key])
+                    self.selection[1][key] = sel1  # clamp & store
                     sx = left_x + 20
-                    for iwin, val in enumerate(window1):
-                        global_idx = start1 + iwin
-                        if global_idx == sel1 and cp == 1 and self.selected_row == i:
-                            # highlighted selected
+
+                    # opening bracket
+                    try:
+                        self.stdscr.addstr(row_y, sx, "[", self.C_DEFAULT)
+                    except curses.error:
+                        pass
+                    sx += 1  # small padding after '['
+
+                    if not lst1:
+                        # empty list -> show closing bracket immediately
+                        try:
+                            self.stdscr.addstr(row_y, sx - 1, "]", self.C_DEFAULT)
+                        except curses.error:
+                            pass
+                    else:
+                        window1, start1 = centered_window(lst1, sel1, width=5)
+                        for iwin, val in enumerate(window1):
+                            global_idx = start1 + iwin
+                            # highlight only when this player is active and this row is selected
+                            highlight = (global_idx == sel1 and cp == 1 and self.selected_row == i)
+                            col = self.C_HL if highlight else self.C_DEFAULT
                             try:
-                                self.stdscr.addstr(row_y, sx, f" {val} ", self.C_HL)
+                                # pad each entry consistently
+                                self.stdscr.addstr(row_y, sx, f" {val} ", col)
                             except curses.error:
                                 pass
-                        else:
-                            try:
-                                self.stdscr.addstr(row_y, sx, f" {val} ", self.C_DEFAULT)
-                            except curses.error:
-                                pass
-                        sx += len(f" {val} ")
-                # P2 options
+                            sx += len(f" {val} ")
+                        # closing bracket
+                        try:
+                            self.stdscr.addstr(row_y, sx, "]", self.C_DEFAULT)
+                        except curses.error:
+                            pass
+
+                # P2 options (explicit keys)
                 lst_key_p2 = {
                     "village": "available_villages_p2",
                     "road": "available_roads_p2",
@@ -379,22 +417,37 @@ class TuiOverseer:
                 }.get(key, None)
                 if lst_key_p2:
                     lst2 = state.get(lst_key_p2, [])
-                    sel2 = self.selection[2][key]
-                    window2, start2 = centered_window(lst2, sel2, width=5)
+                    sel2 = self._safe_index(lst2, self.selection[2][key])
+                    self.selection[2][key] = sel2
                     sx2 = right_x + 20
-                    for iwin, val in enumerate(window2):
-                        global_idx = start2 + iwin
-                        if global_idx == sel2 and cp == 2 and self.selected_row == i:
+
+                    # opening bracket
+                    try:
+                        self.stdscr.addstr(row_y, sx2, "[", self.C_DEFAULT)
+                    except curses.error:
+                        pass
+                    sx2 += 2
+
+                    if not lst2:
+                        try:
+                            self.stdscr.addstr(row_y, sx2 - 1, "]", self.C_DEFAULT)
+                        except curses.error:
+                            pass
+                    else:
+                        window2, start2 = centered_window(lst2, sel2, width=5)
+                        for iwin, val in enumerate(window2):
+                            global_idx = start2 + iwin
+                            highlight = (global_idx == sel2 and cp == 2 and self.selected_row == i)
+                            col = self.C_HL if highlight else self.C_DEFAULT
                             try:
-                                self.stdscr.addstr(row_y, sx2, f" {val} ", self.C_HL)
+                                self.stdscr.addstr(row_y, sx2, f" {val} ", col)
                             except curses.error:
                                 pass
-                        else:
-                            try:
-                                self.stdscr.addstr(row_y, sx2, f" {val} ", self.C_DEFAULT)
-                            except curses.error:
-                                pass
-                        sx2 += len(f" {val} ")
+                            sx2 += len(f" {val} ")
+                        try:
+                            self.stdscr.addstr(row_y, sx2, "]", self.C_DEFAULT)
+                        except curses.error:
+                            pass
 
         # Resources area below
         res_y = rows_y + len(labels)*2 + 1
