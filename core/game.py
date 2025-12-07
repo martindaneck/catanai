@@ -68,6 +68,10 @@ class Game:
         for player_id, resource in production_events:
             self.get_player(player_id).add_resource(resource)
 
+    def handle_bank_trade(self, player: Player, offered: str, wanted: str, cost: int) -> bool:
+        player.resources[offered] -= cost
+        player.resources[wanted] += 1
+        return True
 
     #############################    
     ### core game progression ###
@@ -181,7 +185,7 @@ class Game:
 
 
     ### main single turn execution ###
-    def advance_one_action(self, action_type: str, target_id: int = -1):
+    def advance_one_action(self, action_type: str, target_id):
         """
         External interface to advance the game by exactly one action.
 
@@ -193,6 +197,7 @@ class Game:
         action_type is one of "build_settlement", "build_city", "build_road"
         to attempt to perform that action on target_id.
         action_type is "end_turn" for ending the turn and switching to the next player
+        action_type is "trade_bank" for trading with the bank, target_id is a tuple (offered_resource, wanted_resource, cost)
 
         After something is built, check for win condition and end the game if met.
 
@@ -210,7 +215,7 @@ class Game:
             success = True
         elif action_type in {"build_settlement", "build_city", "build_road"}:
             success = self.perform_build_action(action_type, target_id)
-            if success and action_type == "build_road":
+            if success and action_type in {"build_road", "build_settlement"}:
                 self.update_longest_road()
             if success:
                 self.check_win_condition() # also finishes the game if win condition met
@@ -218,6 +223,9 @@ class Game:
             if self.turn_number != 1:
                 self.switch_player()
             success = True
+        elif action_type == "trade_bank":
+            offered, wanted, cost = target_id  # unpack tuple
+            success = self.handle_bank_trade(current_player, offered, wanted, cost)
         else:
             success = False  # unknown action
 
@@ -341,6 +349,7 @@ class Game:
         Return a JSON-serializable snapshot intended for the TUI.
         {
             "current_player_id": int,
+            "turn_number": int,
             "last_rolls": [(d1,d2), ...],             # list of tuples for current turn (may be empty)
             "resources_p1": {res: count, ...},
             "resources_p2": {res: count, ...},
@@ -350,6 +359,8 @@ class Game:
             "available_roads_p2": [road_ids...],
             "available_cities_p1": [node_ids...],
             "available_cities_p2": [node_ids...],
+            "available_trade_offers_p1": {offered_resource: [(wanted_resource, cost), ...], ...},
+            "available_trade_offers_p2": {offered_resource: [(wanted_resource, cost), ...], ...},
         }
         """
         p1 = self.p1
@@ -379,6 +390,9 @@ class Game:
         av_c_p1 = sorted(p1.get_available_city_spots(self.board)) if self.current_player_id == 1 else []
         av_c_p2 = sorted(p2.get_available_city_spots(self.board)) if self.current_player_id == 2 else []
 
+        av_to_p1 = p1.get_available_trade_offers(self.board) if self.current_player_id == 1 else {}
+        av_to_p2 = p2.get_available_trade_offers(self.board) if self.current_player_id == 2 else {}
+
         state = {
             "current_player_id": self.current_player_id,
             "turn_number": self.turn_number,
@@ -391,6 +405,8 @@ class Game:
             "available_roads_p2": av_r_p2,
             "available_cities_p1": av_c_p1,
             "available_cities_p2": av_c_p2,
+            "available_trade_offers_p1": av_to_p1,
+            "available_trade_offers_p2": av_to_p2
         }
         return state
 

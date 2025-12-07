@@ -1,4 +1,4 @@
-from typing import List, Dict, Set, TYPE_CHECKING
+from typing import List, Dict, Set, Tuple, TYPE_CHECKING
 
 from .board import Board
 
@@ -149,6 +149,35 @@ class Player:
             return []
         return board.list_legal_road_spots(self.id) if self.has_resources(ROAD_COST) or free_road else []
     
+    def get_available_trade_offers(self, board: Board) -> Dict[str, List[Tuple[str, int]]]:
+        """
+        returns a dict
+        {
+            "brick": [("wood", 2), ("sheep", 3), ...], # meaning can trade 2 wood for 1 brick
+            "wood": [("brick", 2), ("sheep", 3), ...],
+            ...
+        }
+        """
+        resources = ["brick", "wood", "sheep", "wheat", "ore"]
+        offers = {}
+        rates = {}
+        for res in resources:
+            if res in self.ports:
+                rates[res] = 2
+            elif "generic" in self.ports:
+                rates[res] = 3
+            else:
+                rates[res] = 4
+        # build offers
+        for res in resources:
+            cost = rates[res]
+            if self.resources[res] >= cost:
+                offers[res] = []
+                for target_res in resources:
+                    if target_res != res:
+                        offers[res].append((target_res, cost))
+
+        return offers
 
 
     def get_owned_settlements(self, board: Board):
@@ -171,3 +200,6 @@ class Player:
             for r in board.roads.values() 
             if r.owner == self.id
         ]
+    
+    def get_owned_ports(self, board: Board):
+        return list(self.ports)
