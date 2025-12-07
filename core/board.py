@@ -10,7 +10,7 @@ class Node:
     def __init__(self, node_id: int):
         self.id: int = node_id
         self.hexes: List[int] = [] # Hex IDs adjacent to this node
-        self.port: Optional[str] = None
+        self.port: str = ""  # Port type if any, else empty string
         self.occupant: int = 0  # 0 = empty, 1 = player 1 settlement, 2 = player 2 settlement, 3 = player 1 city, 4 = player 2 city
         self.neighbours: List[int] = []  # Node IDs adjacent to this node - there must be a road between them, used for traversing
         self.adjacent_roads: List[int] = []  # Road IDs connected to this node
@@ -73,6 +73,7 @@ class Board:
         self.nodes: Dict[int, Node] = {}
         self.hexes: Dict[int, HexTile] = {}
         self.roads: Dict[int, Road] = {}
+        self.ports: Dict[int, str] = {} # node_id to port type mapping
 
     # --- Initialization ---
 
@@ -108,7 +109,14 @@ class Board:
             node_a, node_b = road.nodes
             self.nodes[node_a].neighbours.append(node_b)
             self.nodes[node_b].neighbours.append(node_a)
-    
+
+        # link ports
+        for port_data in data['ports']:
+            port_type = port_data['type']
+            village_ids = port_data['village_ids']
+            for village_id in village_ids:
+                self.nodes[village_id].port = port_type
+                self.ports[village_id] = port_type
 
     # --- Game State Logic ---
 

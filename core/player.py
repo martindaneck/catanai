@@ -46,6 +46,7 @@ class Player:
             "cities": 0,
             "roads": 0
         }
+        self.ports: Set[str] = set() # resource types for which the player has ports (e.g., "brick", "wood", or "generic" for 3:1 port)
 
     ## resource helpers
 
