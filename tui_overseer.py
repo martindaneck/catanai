@@ -256,7 +256,8 @@ class TuiOverseer:
     def draw(self):
         self.stdscr.erase()
         max_y, max_x = self.stdscr.getmaxyx()
-        half_y = max_y // 2
+        half_y = max_y // 2  
+        half_y += 5
 
         state = self.game.get_ui_state()
 
@@ -533,7 +534,7 @@ class TuiOverseer:
         self.selection[cp]["trade_receive"] = sel_receive
         self.selected_resource_to_receive[cp] = lst_receive[sel_receive] if lst_receive else None
         self._draw_list(trade_y + 1, left_x + col_1_w + col_2_w + 1, lst_receive, sel_receive,
-                        active=(self.selected_row == 4))
+                        active=(True))
 
         # --- Column 3: Trade Give ---
         try:
