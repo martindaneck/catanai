@@ -185,7 +185,7 @@ class Game:
 
 
     ### main single turn execution ###
-    def advance_one_action(self, action_type: str, target_id):
+    def advance_one_action(self, action_type: str, target_id = -1):
         """
         External interface to advance the game by exactly one action.
 

@@ -31,12 +31,12 @@ class TuiOverseer:
           left quarter: dice panel
           right three-quarters: player panel (P1 left half, P2 right half)
     Navigation:
-      - Up/Down: move between rows (Finish, Village, Road, City, Resources)
-      - Left/Right or mouse-wheel or 'a'/'d': scroll options for active player
+      - Up/Down: move between rows (Finish, Village, Road, City, etc.)
+      - Left/Right or mouse-wheel or 'h'/'l': scroll options for active player
       - Enter: execute selected action (for active player)
     """
 
-    ACTION_ROWS = ["finish", "village", "road", "city", "resources"]
+    ACTION_ROWS = ["finish", "village", "road", "city", "trade_receive", "trade_give"]
 
     def __init__(self, stdscr, game: Game):
         self.stdscr = stdscr
@@ -44,8 +44,12 @@ class TuiOverseer:
 
         # per-player selection indices for each action (keeps position when switching player)
         self.selection = {
-            1: {"village": 0, "road": 0, "city": 0},
-            2: {"village": 0, "road": 0, "city": 0},
+            1: {"village": 0, "road": 0, "city": 0, "trade_receive": 0, "trade_give": 0},
+            2: {"village": 0, "road": 0, "city": 0, "trade_receive": 0, "trade_give": 0},
+        }
+        self.selected_resource_to_receive = {
+            1: None,
+            2: None
         }
 
         # which row (index into ACTION_ROWS) is currently highlighted
@@ -112,9 +116,9 @@ class TuiOverseer:
                 self.on_up()
             elif key in (curses.KEY_DOWN, ord('j')):
                 self.on_down()
-            elif key in (curses.KEY_LEFT, ord('a')):
+            elif key in (curses.KEY_LEFT, ord('h')):
                 self.on_left()
-            elif key in (curses.KEY_RIGHT, ord('d')):
+            elif key in (curses.KEY_RIGHT, ord('l')):
                 self.on_right()
             elif key in (10, 13, curses.KEY_ENTER):
                 self.on_enter()
@@ -133,17 +137,30 @@ class TuiOverseer:
         active = state["current_player_id"]
         row = self.ACTION_ROWS[self.selected_row]
         if row == "village":
-            lst = state[f"available_villages_p{active}"]
+            lst = state["available_villages_cp"]
             idx = self._safe_index(lst, self.selection[active]["village"])
             self.selection[active]["village"] = self._safe_index(lst, idx - 1)
         elif row == "road":
-            lst = state[f"available_roads_p{active}"]
+            lst = state["available_roads_cp"]
             idx = self._safe_index(lst, self.selection[active]["road"])
             self.selection[active]["road"] = self._safe_index(lst, idx - 1)
         elif row == "city":
-            lst = state[f"available_cities_p{active}"]
+            lst = state["available_cities_cp"]
             idx = self._safe_index(lst, self.selection[active]["city"])
             self.selection[active]["city"] = self._safe_index(lst, idx - 1)
+        elif row == "trade_receive":
+            trade_offers = state["available_trade_offers_cp"]
+            lst = list(trade_offers.keys())
+            idx = self._safe_index(lst, self.selection[active]["trade_receive"])
+            self.selection[active]["trade_receive"] = self._safe_index(lst, idx - 1)
+            lst_list = list(lst)
+            self.selected_resource_to_receive[active] = lst_list[self.selection[active]["trade_receive"]] if lst_list else None
+        elif row == "trade_give":
+            trade_offers = state["available_trade_offers_cp"]
+            # this ungodly statement builds a list of strings like "wood x2", "sheep x3", etc.
+            lst = [str(trade_offers[self.selected_resource_to_receive[active]][i][0]) + " x" + str(trade_offers[self.selected_resource_to_receive[active]][i][1]) for i in range(len(trade_offers[self.selected_resource_to_receive[active]]))] if trade_offers[self.selected_resource_to_receive[active]] else []
+            idx = self._safe_index(lst, self.selection[active]["trade_give"])
+            self.selection[active]["trade_give"] = self._safe_index(lst, idx - 1)
 
     def on_right(self):
         """Scroll right for active player's current row's selection"""
@@ -151,17 +168,29 @@ class TuiOverseer:
         active = state["current_player_id"]
         row = self.ACTION_ROWS[self.selected_row]
         if row == "village":
-            lst = state[f"available_villages_p{active}"]
+            lst = state["available_villages_cp"]
             idx = self._safe_index(lst, self.selection[active]["village"])
             self.selection[active]["village"] = self._safe_index(lst, idx + 1)
         elif row == "road": 
-            lst = state[f"available_roads_p{active}"]
+            lst = state["available_roads_cp"]
             idx = self._safe_index(lst, self.selection[active]["road"])
             self.selection[active]["road"] = self._safe_index(lst, idx + 1)
         elif row == "city":
-            lst = state[f"available_cities_p{active}"]
+            lst = state["available_cities_cp"]
             idx = self._safe_index(lst, self.selection[active]["city"])
             self.selection[active]["city"] = self._safe_index(lst, idx + 1)
+        elif row == "trade_receive":
+            trade_offers = state["available_trade_offers_cp"]
+            lst = list(trade_offers.keys())
+            idx = self._safe_index(lst, self.selection[active]["trade_receive"])
+            self.selection[active]["trade_receive"] = self._safe_index(lst, idx + 1)
+            lst_list = list(lst)
+            self.selected_resource_to_receive[active] = lst_list[self.selection[active]["trade_receive"]] if lst_list else None
+        elif row == "trade_give":
+            trade_offers = state["available_trade_offers_cp"]
+            lst = [str(trade_offers[self.selected_resource_to_receive[active]][i][0]) + " x" + str(trade_offers[self.selected_resource_to_receive[active]][i][1]) for i in range(len(trade_offers[self.selected_resource_to_receive[active]]))] if trade_offers[self.selected_resource_to_receive[active]] else []
+            idx = self._safe_index(lst, self.selection[active]["trade_give"])
+            self.selection[active]["trade_give"] = self._safe_index(lst, idx + 1)
 
     def on_enter(self):
         state = self.game.get_ui_state()
@@ -174,7 +203,7 @@ class TuiOverseer:
             return
 
         if row == "village":
-            lst = state[f"available_villages_p{active}"]
+            lst = state["available_villages_cp"]
             if not lst:
                 return
             
@@ -185,7 +214,7 @@ class TuiOverseer:
             self.game.advance_one_action("build_settlement", target)
 
         elif row == "road":
-            lst = state[f"available_roads_p{active}"]
+            lst = state["available_roads_cp"]
             if not lst:
                 return
             
@@ -196,7 +225,7 @@ class TuiOverseer:
             self.game.advance_one_action("build_road", target)
 
         elif row == "city":
-            lst = state[f"available_cities_p{active}"]
+            lst = state["available_cities_cp"]
             if not lst:
                 return
 
@@ -205,6 +234,22 @@ class TuiOverseer:
             target = lst[idx]
             
             self.game.advance_one_action("build_city", target)
+
+        elif row == "trade_give":
+            trade_offers = state["available_trade_offers_cp"]
+            resource_to_receive = self.selected_resource_to_receive[active]
+            if resource_to_receive is None:
+                return
+            lst = trade_offers[resource_to_receive] if trade_offers[resource_to_receive] else []
+            if not lst:
+                return
+
+            idx = self._safe_index(lst, self.selection[active][row])
+            self.selection[active][row] = idx
+            resource_to_give, cost = lst[idx]
+            cost = int(cost)    
+
+            self.game.advance_one_action("trade_bank", (resource_to_receive, resource_to_give, cost))
 
 
     # --- drawing ---
@@ -221,28 +266,28 @@ class TuiOverseer:
         row = self.ACTION_ROWS[self.selected_row]
 
         if row == "village":
-            lst = state[f"available_villages_p{cp}"]
+            lst = state["available_villages_cp"]
             if lst:
                 highlight_id = (1,lst[self.selection[cp]["village"]])
         elif row == "road":
-            lst = state[f"available_roads_p{cp}"]
+            lst = state["available_roads_cp"]
             if lst:
                 highlight_id = (2,lst[self.selection[cp]["road"]])
         elif row == "city":
-            lst = state[f"available_cities_p{cp}"]
+            lst = state["available_cities_cp"]
             if lst:
                 highlight_id = (1,lst[self.selection[cp]["city"]])
 
         # top half = inline node map
         self.draw_map(0, 0, half_y, max_x, highlight_id)
 
-        # bottom half split: dice panel (left quarter), player panel (right 3/4)
-        dice_w = max_x // 4
+        # bottom half split: dice panel (left eighth), player panel (right 7/8)
+        dice_w = max_x // 8
         self.draw_dice(half_y, 0, max_y - half_y, dice_w, state)
         self.draw_player_panel(half_y, dice_w + 1, max_y - half_y, max_x - (dice_w + 1), state)
 
         # footer help
-        footer = "Arrows / a d to scroll — Enter to act — q to quit"
+        footer = "Arrows or hjkl to navigate — Enter to act — q to quit"
         try:
             self.stdscr.addstr(max_y - 1, max(0, (max_x - len(footer))//2), footer, self.C_DEFAULT)
         except curses.error:
@@ -399,99 +444,118 @@ class TuiOverseer:
                 pass
 
     def draw_player_panel(self, y, x, h, w, state):
-        # left half = p1, right half = p2
-        half_w = w // 2
-        left_x = x
-        right_x = x + half_w
-        cp = state["current_player_id"]
-        turn_str = f"Turn {state['turn_number']}"
+        """
+        top line looks like "{CP} bunch of space {OP} a little less space Turn: N" CP and OP are colored
+        the left three-quarters is for current player, right quarter for opponent
+        this panel is divided into 4 horizontal sections (columns):
+        1. Available main actions (row labels 1-4)
+        2. Player resources (5 lines)
+        3. Trade offers (row labels 5-6)
+        4. Opponent info (Opponent's resources)
 
-        # Header
+        Each action row shows available options in [ ... ] with current selection highlighted.
+        """
+        # determine widths by percentage
+        col_1_w = int(w * 0.30)
+        col_2_w = int(w * 0.25)
+        col_3_w = int(w * 0.28)
+        col_4_w = w - (col_1_w + col_2_w + col_3_w)  # remainder
+
+        cp = state["current_player_id"]
+        op = 2 if cp == 1 else 1
+        
+        # header line
+        header = f"{' ' * (w - 10)} Turn: {state['turn_number']}"
         try:
-            self.stdscr.addstr(y, left_x + 2, "P1", self.C_P1 | (curses.A_BOLD if cp == 1 else curses.A_DIM))
-            self.stdscr.addstr(y, right_x + 2, "P2", self.C_P2 | (curses.A_BOLD if cp == 2 else curses.A_DIM))
-            self.stdscr.addstr(y, x + w - len(turn_str) - 2, turn_str, self.C_DEFAULT | curses.A_BOLD)
+            self.stdscr.addstr(y, x, header, self.C_DEFAULT)
+            self.stdscr.addstr(y, x, f"P{cp}", self.C_P1 if cp == 1 else self.C_P2)
+            self.stdscr.addstr(y, x + w - col_4_w, f"P{op}", self.C_P1 if op == 1 else self.C_P2)
         except curses.error:
             pass
 
-        # Rows list
-        rows_y = y + 2
-        labels = [
-            ("Finish turn", "finish"),
-            ("Build Village", "village"),
-            ("Build Road", "road"),
-            ("Build City", "city")
-        ]
+        # --- Columns start at y + 2 ---
+        left_x = x
+        right_x = x + w - col_4_w
+        top_y = y
 
-        # Explicit mapping so city → cities (not "citys")
-        KEYMAP_P1 = {
-            "village": "available_villages_p1",
-            "road": "available_roads_p1",
-            "city": "available_cities_p1"
-        }
-        KEYMAP_P2 = {
-            "village": "available_villages_p2",
-            "road": "available_roads_p2",
-            "city": "available_cities_p2"
-        }
+        start_y = top_y + 2
 
-        for i, (label, key) in enumerate(labels):
-            row_y = rows_y + i*2
+        # --- Column 1: Actions ---
+        action_labels = ["Finish Turn", "Build Village", "Build Road", "Build City"]
+        action_keys = ["finish", "village", "road", "city"]
 
-            # label left
-            attr_left = self.C_HL if (self.selected_row == i and cp == 1) else self.C_DEFAULT
+        try:
+            self.stdscr.addstr(start_y, left_x + 1, "Actions:", curses.A_BOLD)
+        except curses.error:
+            pass
+
+        for i, (label, key) in enumerate(zip(action_labels, action_keys)):
+            row_y = start_y + i * 2
+            active = (self.selected_row == i)
+            attr = self.C_HL if active else self.C_DEFAULT
+
+            # Draw label
             try:
-                self.stdscr.addstr(row_y, left_x + 1, f"{label}:", attr_left)
+                self.stdscr.addstr(row_y + 1, left_x + 1, f"{label}:", attr)
             except curses.error:
                 pass
 
-            # label right
-            attr_right = self.C_HL if (self.selected_row == i and cp == 2) else self.C_DEFAULT
-            try:
-                self.stdscr.addstr(row_y, right_x + 1, f"{label}:", attr_right)
-            except curses.error:
-                pass
-
-            # finish-turn rows get simple []
-            if key == "finish":
+            # Draw list for village/road/city
+            if key != "finish":
+                lst = state.get(f"available_{key}s_cp", [])
+                sel = self._safe_index(lst, self.selection[cp][key])
+                self.selection[cp][key] = sel
+                self._draw_list(row_y + 1, left_x + col_1_w // 2 - 2, lst, sel, active=active)
+            else:
                 try:
-                    self.stdscr.addstr(row_y, left_x + 20, "[]", attr_left)
-                    self.stdscr.addstr(row_y, right_x + 20, "[]", attr_right)
+                    self.stdscr.addstr(row_y + 1, left_x + col_1_w // 2 - 2, "[]", attr)
                 except curses.error:
                     pass
-                continue
 
-            # --- P1 LIST ---
-            lst_key = KEYMAP_P1.get(key)
-            lst = state.get(lst_key, [])
-            sel = self._safe_index(lst, self.selection[1][key])
-            self.selection[1][key] = sel
-
-            sx = left_x + 20
-            self._draw_list(row_y, sx, lst, sel, active=(cp == 1 and self.selected_row == i))
-
-            # --- P2 LIST ---
-            lst_key2 = KEYMAP_P2.get(key)
-            lst2 = state.get(lst_key2, [])
-            sel2 = self._safe_index(lst2, self.selection[2][key])
-            self.selection[2][key] = sel2
-
-            sx2 = right_x + 20
-            self._draw_list(row_y, sx2, lst2, sel2, active=(cp == 2 and self.selected_row == i))
-
-        # Resources section
-        res_y = rows_y + len(labels)*2 + 1
+        # --- Column 2: Resources ---
+        res_y = start_y
         try:
-            self.stdscr.addstr(res_y, left_x + 1, "Resources:", curses.A_BOLD)
+            self.stdscr.addstr(res_y, left_x + col_1_w + 1, "Resources:", curses.A_BOLD)
         except curses.error:
             pass
-        self.draw_resources(res_y + 1, left_x + 1, state["resources_p1"])
+        self.draw_resources(res_y + 1, left_x + col_1_w + 1, state[f"resources_cp"])
 
+        # --- Column 3: Trade Receive ---
+        trade_y = start_y
         try:
-            self.stdscr.addstr(res_y, right_x + 1, "Resources:", curses.A_BOLD)
+            self.stdscr.addstr(trade_y, left_x + col_1_w + col_2_w + 1, "Trade Receive:", curses.A_BOLD)
         except curses.error:
             pass
-        self.draw_resources(res_y + 1, right_x + 1, state["resources_p2"])
+
+        trade_offers = state["available_trade_offers_cp"]
+        lst_receive = list(trade_offers.keys())
+        sel_receive = self._safe_index(lst_receive, self.selection[cp]["trade_receive"])
+        self.selection[cp]["trade_receive"] = sel_receive
+        self.selected_resource_to_receive[cp] = lst_receive[sel_receive] if lst_receive else None
+        self._draw_list(trade_y + 1, left_x + col_1_w + col_2_w + 1, lst_receive, sel_receive,
+                        active=(self.selected_row == 4))
+
+        # --- Column 3: Trade Give ---
+        try:
+            self.stdscr.addstr(trade_y + 4, left_x + col_1_w + col_2_w + 1, "Trade Give:", curses.A_BOLD)
+        except curses.error:
+            pass
+
+        if self.selected_resource_to_receive[cp] and trade_offers.get(self.selected_resource_to_receive[cp]):
+            lst_give = [f"{res} x{amt}" for res, amt in trade_offers[self.selected_resource_to_receive[cp]]]
+        else:
+            lst_give = []
+        sel_give = self._safe_index(lst_give, self.selection[cp]["trade_give"])
+        self.selection[cp]["trade_give"] = sel_give
+        self._draw_list(trade_y + 5, left_x + col_1_w + col_2_w + 1, lst_give, sel_give,
+                        active=(self.selected_row == 5))
+
+        # --- Column 4: Opponent Resources ---
+        try:
+            self.stdscr.addstr(start_y, right_x + 1, f"P{op} Resources:", curses.A_BOLD)
+        except curses.error:
+            pass
+        self.draw_resources(start_y + 1, right_x + 1, state[f"resources_op"])
 
     def draw_resources(self, y, x, resources):
         # layout:
