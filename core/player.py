@@ -97,6 +97,10 @@ class Player:
 
         self.built["settlements"] += 1
 
+        port = board.nodes[node_id].port
+        if port != "none":
+            self.ports.add(port)
+
         return True
     
     
