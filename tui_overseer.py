@@ -208,6 +208,7 @@ class TuiOverseer:
         if row == "finish":
             self.game.advance_one_action("end_turn")
             self.game.advance_one_action("start_turn")
+            # this is potentially the point where AI makes its move
             return
 
         if row == "village":
@@ -333,7 +334,7 @@ class TuiOverseer:
         for road_id, road in board.roads.items():
             occ = road.owner  # 0=empty, 1=p1, 2=p2
 
-            color = self.C_P1 if occ == 1 else self.C_P2 if occ == 2 else self.C_HL if highlight_id == (2, road_id) else self.C_DEFAULT
+            color = self.C_HL if highlight_id == (2, road_id) else self.C_P1 if occ == 1 else self.C_P2 if occ == 2 else self.C_DEFAULT
 
             if road_id in (69,71,43,67,28,12,31,65,26,5,7,32,38,10,2,17,50,37,21,19,52,58,56,54):
                 r.setdefault(f"{road_id:02d}1", ("⠋", color))  # -> r["691"] = ("⠋", color)
