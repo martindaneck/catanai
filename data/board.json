@@ -176,14 +176,14 @@
         {
             "id": 9,
             "adjacent_hexes": [5,6,9],
-            "adjacent_roads": [7, 9, 14],
+            "adjacent_roads": [7, 14, 15],
             "occupied_by": "none",
             "port": "none"
         },
         {
             "id": 10,
             "adjacent_hexes": [6,9,10],
-            "adjacent_roads": [9,16,32],
+            "adjacent_roads": [15,16,32],
             "occupied_by": "none",
             "port": "none"
         },
@@ -509,7 +509,7 @@
         {"id":16,"village_ids":[10,11]},
         {"id":17,"village_ids":[11,12]},
         {"id":18,"village_ids":[12,13]},
-        {"id":19,"village_ids":[13,19]},
+        {"id":19,"village_ids":[13,14]},
         {"id":20,"village_ids":[14,15]},
         {"id":21,"village_ids":[15,16]},
         {"id":22,"village_ids":[16,17]},

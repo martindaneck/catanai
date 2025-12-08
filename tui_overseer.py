@@ -64,12 +64,20 @@ class TuiOverseer:
         curses.init_pair(3, curses.COLOR_MAGENTA, -1) # p2
         curses.init_pair(4, curses.COLOR_YELLOW, -1)  # highlight
         curses.init_pair(5, curses.COLOR_CYAN, -1)    # dice color
+        curses.init_pair(6, curses.COLOR_GREEN, -1)   # grass
+        curses.init_pair(7, curses.COLOR_RED, -1)     # brick
+        curses.init_pair(8, curses.COLOR_YELLOW, -1)  # wheat
+        curses.init_pair(9, curses.COLOR_WHITE, -1)    # ore
 
         self.C_DEFAULT = curses.color_pair(1)
         self.C_P1 = curses.color_pair(2) | curses.A_BOLD
         self.C_P2 = curses.color_pair(3) | curses.A_BOLD
         self.C_HL = curses.color_pair(4) | curses.A_BOLD
         self.C_DICE = curses.color_pair(5) | curses.A_BOLD
+        self.C_GRASS = curses.color_pair(6) | curses.A_BOLD
+        self.C_BRICK = curses.color_pair(7) | curses.A_BOLD
+        self.C_WHEAT = curses.color_pair(8) | curses.A_BOLD
+        self.C_ORE = curses.color_pair(9) | curses.A_BOLD
 
         # enable mouse events for scroll wheel if terminal supports it
         curses.mousemask(curses.ALL_MOUSE_EVENTS | curses.REPORT_MOUSE_POSITION)
@@ -300,74 +308,104 @@ class TuiOverseer:
         self.stdscr.refresh()
 
     def draw_map(self, y, x, h, w, highlight_id=None):
-        # prototype: inline nodes like `n0. n1v n2c n3. ...` wrapped into lines to fit width
+        """
+        Draws the map character by character utilizing braille dots for edges and other characters for nodes.
+        """
         board = self.game.board
-        items = []
-        for nid, node in board.nodes.items():
-            occ = node.occupant
-            if occ == 0:
-                mark = "."
-                color = self.C_DEFAULT
-            elif occ == 1:
-                mark = "v" if occ in (1,) else "."
-                color = self.C_P1
-            elif occ == 2:
-                mark = "v"
-                color = self.C_P2
-            elif occ == 3:
-                mark = "c"
-                color = self.C_P1
-            elif occ == 4:
-                mark = "c"
-                color = self.C_P2
-            else:
-                mark = "."
-                color = self.C_DEFAULT
 
-            # 🔥 highlight selected node
-            if highlight_id == (1, nid):
-                color = self.C_HL
+        # used characters for map: dots are roads, X villages, @ cities, • empty nodes, NN = hex number, r = resource
+        """example layout (inaccurate):
+        
+              ⢀⡤•⢤⡀	⢀⡤•⢤⡀          
+             •⠋ r ⠙X⠋ r ⠙@
+             ⡇ NN  ⡇ NN  ⡇
+             •⣄ r ⣠X⣄ r ⣠•
+              ⠈⠓@⠋⠁r⠈⠓X⠋⠁
+                ⡇ NN   ⡇
+                •⣄ r ⣠X
+                 ⠈⠓•⠋⠁
+        """   
 
-            items.append((f"n{nid}{mark}", color))
+        nothing_ = ""
+        newline_ = "\n"
 
-        # Add roads inline the same way
-        for rid, road in board.roads.items():
+        r = {}# road list: key: NNX where NN is road_id, X is braille char configuration; value: (char, color)
+        for road_id, road in board.roads.items():
             occ = road.owner  # 0=empty, 1=p1, 2=p2
-            if occ == 0:
-                mark = "."
-                color = self.C_DEFAULT
-            elif occ == 1:
-                mark = "/"
-                color = self.C_P1
-            elif occ == 2:
-                mark = "/"
-                color = self.C_P2
+
+            color = self.C_P1 if occ == 1 else self.C_P2 if occ == 2 else self.C_HL if highlight_id == (2, road_id) else self.C_DEFAULT
+
+            if road_id in (69,71,43,67,28,12,31,65,26,5,7,32,38,10,2,17,50,37,21,19,52,58,56,54):
+                r.setdefault(f"{road_id:02d}1", ("⠋", color))  # -> r["691"] = ("⠋", color)
+                r.setdefault(f"{road_id:02d}2", ("⢀", color))
+                r.setdefault(f"{road_id:02d}3", ("⡤", color))
+            elif road_id in (68,41,30,45,66,27,6,14,47,64,52,4,1,16,62,23,9,18,51,60,36,35,53,25,49):
+                r.setdefault(f"{road_id:02d}1", ("⡇", color))
             else:
-                mark = "."
-                color = self.C_DEFAULT
+                r.setdefault(f"{road_id:02d}1", ("⢤", color))
+                r.setdefault(f"{road_id:02d}2", ("⡀", color))
+                r.setdefault(f"{road_id:02d}3", ("⠙", color))
 
-            # 🔥 highlight selected road
-            if highlight_id == (2, rid):
-                color = self.C_HL
+        n = {}# nodelist: key: NN0 where NN is node_id, value: (char, color)
+        for node_id, node in board.nodes.items():
+            occ = node.occupant
 
-            items.append((f"r{rid}{mark}", color))
+            color = self.C_P1 if occ in (1,3) else self.C_P2 if occ in (2,4) else self.C_HL if highlight_id == (1, node_id) else self.C_DEFAULT
 
-        # layout items inline with spacing
-        row = y
-        col = x
-        max_col = x + w - 1
-        for txt, color in items:
-            txt2 = txt + " "
-            if col + len(txt2) > max_col:
-                row += 1
-                col = x
-                if row >= y + h:
-                    break
-            try:
-                self.stdscr.addstr(row, col, txt2, color)
-            except curses.error:
-                pass
-            col += len(txt2)
+            char = "•" if occ == 0 else "X" if occ in (1,2) else "@"
+            n.setdefault(f"{node_id:02d}0", (char, color))
+
+        d = {} # decoration list: key: NNX where NN is hex_id, X is 0 for decoration, 1 for left-half-of-number, 2 for right-half-of-number; value: (char, color)
+        for hex_id, hex_tile in board.hexes.items():
+            res = hex_tile.resource
+            num = hex_tile.dice_number
+
+            res_char = "↑" if res == "wood" else "v" if res == "sheep" else "■" if res == "brick" else "W" if res == "wheat" else "■" if res == "ore" else " "
+            color = self.C_GRASS if res == "wood" else self.C_GRASS if res == "sheep" else self.C_BRICK if res == "brick" else self.C_WHEAT if res == "wheat" else self.C_ORE if res == "ore" else self.C_DEFAULT
+
+            d.setdefault(f"{hex_id:02d}0", (res_char, color))
+
+            num_char_1 = str(num)[0] if num >= 10 else " "
+            num_char_2 = str(num)[1] if num >= 10 else str(num)
+            d.setdefault(f"{hex_id:02d}1", (num_char_1, self.C_DEFAULT))
+            d.setdefault(f"{hex_id:02d}2", (num_char_2, self.C_DEFAULT))
+
+
+        map = [
+            nothing_,nothing_,nothing_,nothing_,nothing_,nothing_,nothing_,r["692"],r["693"],n["520"],r["701"],r["702"],nothing_,r["712"],r["713"],n["240"],r["421"],r["422"],nothing_,r["432"],r["433"],n["260"],r["441"],r["442"],nothing_,nothing_,nothing_,nothing_,nothing_,nothing_,nothing_,newline_,
+            nothing_,nothing_,nothing_,nothing_,nothing_,nothing_,n["510"],r["691"],d["000"],nothing_,nothing_,r["703"],n["530"],r["711"],nothing_,nothing_,nothing_,r["423"],n["250"],r["431"],nothing_,d["020"],nothing_,r["443"],n["270"],nothing_,nothing_,nothing_,nothing_,nothing_,nothing_,newline_,
+            nothing_,nothing_,nothing_,nothing_,nothing_,nothing_,r["681"],nothing_,d["001"],d["002"],d["000"],nothing_,r["411"],nothing_,d["011"],d["012"],d["010"],nothing_,r["301"],d["020"],d["021"],d["022"],nothing_,d["020"],r["451"],nothing_,nothing_,nothing_,nothing_,nothing_,nothing_,newline_,
+            nothing_,nothing_,nothing_,nothing_,r["672"],r["673"],n["500"],r["401"],r["402"],d["000"],r["282"],r["283"],n["230"],r["291"],r["292"],nothing_,r["122"],r["123"],n["070"],r["131"],r["132"],d["020"],r["312"],r["313"],n["280"],r["461"],r["462"],nothing_,nothing_,nothing_,nothing_,newline_,
+            nothing_,nothing_,nothing_,n["490"],r["671"],d["030"],nothing_,nothing_,r["403"],n["220"],r["281"],d["040"],d["040"],nothing_,r["293"],n["060"],r["121"],d["050"],nothing_,d["050"],r["133"],n["080"],r["311"],nothing_,nothing_,d["060"],r["463"],n["290"],nothing_,nothing_,nothing_,newline_,
+            nothing_,nothing_,nothing_,r["661"],nothing_,d["031"],d["032"],nothing_,nothing_,r["271"],d["040"],d["041"],d["042"],nothing_,d["040"],r["061"],nothing_,d["051"],d["052"],nothing_,nothing_,r["141"],nothing_,d["061"],d["062"],nothing_,d["060"],r["471"],nothing_,nothing_,nothing_,newline_,
+            nothing_,r["652"],r["653"],n["480"],r["391"],r["392"],nothing_,r["262"],r["263"],n["210"],r["111"],r["112"],d["040"],r["052"],r["053"],n["000"],r["001"],r["002"],d["050"],r["072"],r["073"],n["090"],r["151"],r["152"],d["060"],r["322"],r["323"],n["300"],r["481"],r["482"],nothing_,newline_,
+            n["470"],r["651"],d["070"],d["070"],d["070"],r["393"],n["200"],r["261"],nothing_,d["080"],nothing_,r["113"],n["050"],r["051"],nothing_,nothing_,nothing_,r["003"],n["010"],r["071"],d["090"],nothing_,nothing_,r["153"],n["100"],r["321"],d["100"],d["100"],d["100"],r["483"],n["310"],newline_,
+            r["641"],nothing_,d["071"],d["072"],nothing_,nothing_,r["251"],nothing_,d["081"],d["082"],nothing_,d["080"],r["041"],nothing_,nothing_,nothing_,nothing_,nothing_,r["011"],nothing_,d["091"],d["092"],d["090"],nothing_,r["161"],nothing_,d["101"],d["102"],d["100"],nothing_,r["491"],newline_,
+            n["460"],r["631"],r["632"],d["070"],r["382"],r["383"],n["190"],r["241"],r["242"],nothing_,r["102"],r["103"],n["040"],r["031"],r["032"],nothing_,r["022"],r["023"],n["020"],r["081"],r["082"],nothing_,r["172"],r["173"],n["110"],r["331"],r["332"],d["100"],r["502"],r["503"],n["320"],newline_,
+            nothing_,nothing_,r["633"],n["450"],r["381"],d["110"],nothing_,nothing_,r["243"],n["180"],r["101"],nothing_,d["120"],nothing_,r["033"],n["030"],r["021"],nothing_,nothing_,d["130"],r["083"],n["120"],r["171"],nothing_,nothing_,d["140"],r["333"],n["330"],r["501"],nothing_,nothing_,newline_,
+            nothing_,nothing_,nothing_,r["621"],d["110"],d["111"],d["112"],d["110"],d["110"],r["231"],nothing_,d["121"],d["122"],nothing_,nothing_,r["091"],d["130"],d["131"],d["132"],nothing_,nothing_,r["181"],d["140"],d["141"],d["142"],d["140"],nothing_,r["511"],nothing_,nothing_,nothing_,newline_,
+            nothing_,nothing_,nothing_,n["440"],r["611"],r["612"],d["110"],r["372"],r["373"],n["170"],r["221"],r["222"],d["120"],r["212"],r["213"],n["150"],r["201"],r["202"],d["130"],r["192"],r["193"],n["130"],r["341"],r["342"],d["140"],r["522"],r["523"],n["340"],nothing_,nothing_,nothing_,newline_,
+            nothing_,nothing_,nothing_,nothing_,nothing_,r["613"],n["430"],r["371"],nothing_,d["150"],nothing_,r["223"],n["160"],r["211"],d["160"],nothing_,d["160"],r["203"],n["140"],r["191"],nothing_,d["170"],nothing_,r["343"],n["350"],r["521"],nothing_,nothing_,nothing_,nothing_,nothing_,newline_,
+            nothing_,nothing_,nothing_,nothing_,nothing_,nothing_,r["601"],d["150"],d["151"],d["152"],d["150"],nothing_,r["361"],d["160"],d["161"],d["162"],d["160"],d["160"],r["351"],nothing_,d["171"],d["172"],d["170"],nothing_,r["531"],nothing_,nothing_,nothing_,nothing_,nothing_,nothing_,newline_,
+            nothing_,nothing_,nothing_,nothing_,nothing_,nothing_,n["420"],r["591"],r["592"],d["150"],r["582"],r["583"],n["400"],r["571"],r["572"],nothing_,r["562"],r["563"],n["380"],r["551"],r["552"],nothing_,r["542"],r["543"],n["360"],nothing_,nothing_,nothing_,nothing_,nothing_,nothing_,newline_,
+            nothing_,nothing_,nothing_,nothing_,nothing_,nothing_,nothing_,nothing_,r["593"],n["410"],r["581"],nothing_,nothing_,nothing_,r["573"],n["390"],r["561"],nothing_,nothing_,nothing_,r["553"],n["370"],r["541"],nothing_,nothing_,nothing_,nothing_,nothing_,nothing_,nothing_,nothing_,newline_,
+        ]
+        
+        for item in map:
+            if item == nothing_:
+                self.stdscr.addstr(y, x, " ", self.C_DEFAULT)
+                x += 1
+            elif item == newline_:
+                y += 1
+                x = 0
+            else:
+                char, color = item
+                try:
+                    self.stdscr.addstr(y, x, char, color)
+                except curses.error:
+                    pass
+                x += 1
+
 
     def draw_dice(self, y, x, h, w, state):
         """
