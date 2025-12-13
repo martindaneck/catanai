@@ -389,6 +389,8 @@ class Game:
             "available_roads_cp": av_r_cp,
             "available_cities_cp": av_c_cp,
             "available_trade_offers_cp": av_to_cp,
+            "victory_points_cp": self.calculate_victory_points(cp),
+            "victory_points_op": self.calculate_victory_points(op),
         }
         return state
 

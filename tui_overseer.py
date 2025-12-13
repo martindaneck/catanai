@@ -512,11 +512,11 @@ class TuiOverseer:
         op = 2 if cp == 1 else 1
         
         # header line
-        header = f"{' ' * (w - 10)} Turn: {state['turn_number']}"
+        header = f"{' ' * (5)}P1's victory points = {state['victory_points_cp'] if cp == 1 else state['victory_points_op']}     P2's victory points = {state['victory_points_op'] if cp == 1 else state['victory_points_cp']}{' ' * (5)} Turn: {state['turn_number']}"
         try:
             self.stdscr.addstr(y, x, header, self.C_DEFAULT)
-            self.stdscr.addstr(y, x, f"P{cp}", self.C_P1 if cp == 1 else self.C_P2)
-            self.stdscr.addstr(y, x + w - col_4_w, f"P{op}", self.C_P1 if op == 1 else self.C_P2)
+            self.stdscr.addstr(y + 1, x, f"P{cp}", self.C_P1 if cp == 1 else self.C_P2)
+            self.stdscr.addstr(y + 1, x + w - col_4_w, f"P{op}", self.C_P1 if op == 1 else self.C_P2)
         except curses.error:
             pass
 
